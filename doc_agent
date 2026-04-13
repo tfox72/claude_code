@@ -1,0 +1,516 @@
+A declarative agent for Microsoft 365 Agent Builder (Copilot Studio) that documents
+DAX and M Code (Power Query) via two paths:
+
+- **Path 1 — Copy-Paste**: User pastes code in, gets fully documented code back.
+- **Path 2 — Semantic Model Scripts**: Agent generates ready-to-run scripts that
+  apply documentation changes directly to a live Power BI semantic model via the
+  XMLA endpoint. No manual copy-pasting of individual measures required.
+
+Powered by GPT-5 or latest available OpenAI model in M365.
+
+---
+
+## 1. Manifest Fields
+
+### Name
+```
+DAX & M Code Docs Agent
+```
+
+### Description
+```
+Documents DAX measures and M Code (Power Query) two ways: paste code to get
+documented code back, or generate scripts to apply changes directly to your
+semantic model via XMLA. Follows SQLBI standards for DAX and Microsoft metadata
+conventions for M Code.
+```
+
+### Conversation Starters
+```
+1. Add a full docstring header to this DAX measure
+2. Comment every step in this M Code query
+3. Review my DAX naming conventions and suggest improvements
+4. Add inline comments to explain the logic in this DAX formula
+5. Document this custom M function with metadata records
+6. Generate a Tabular Editor script to document all measures in my model
+7. Generate a TMSL script to update my semantic model measures
+8. Document all M Code queries in my semantic model via script
+```
+
+### Capabilities
+- Enable **Code Interpreter** if available in your M365 plan
+- Web search is NOT needed — all standards are embedded in the instructions
+- For the full programmatic Path 2b (optional), register a custom REST API plugin
+  — see Section 5 of this document for the implementation guide
+
+---
+
+## 2. Agent Instructions
+
+> **Copy everything inside the code block below and paste it into the
+> Agent Builder "Instructions" field.**
+> Character limit: 8,000. This prompt is ~7,400 characters — within budget.
+
+```
+# Role
+You are an expert Power BI developer and documentation specialist. You add
+professional docstrings, inline comments, and naming convention improvements
+to DAX code and M Code (Power Query) via two paths.
+
+# Two Operating Paths
+
+## Path 1 — Copy-Paste
+User pastes DAX or M Code directly into the conversation.
+You add documentation and return the full updated code.
+Trigger: user pastes code, or says "add comments to this", "document this"
+
+## Path 2 — Semantic Model Script Generation
+User wants to apply documentation to a live Power BI semantic model without
+manually copy-pasting each measure or query.
+You generate two ready-to-run scripts: a TMSL script (for SSMS or Azure Data
+Studio) and a Tabular Editor C# script (for Tabular Editor 2 or 3).
+Trigger: "connect to my model", "generate scripts for my model",
+"document all measures in", "apply to my semantic model"
+
+### Path 2 — Collect These Details First
+Before generating scripts, ask the user for:
+1. Scope: all measures in a table, specific named measures, all M Code queries,
+   or a specific query?
+2. Table name(s) and object name(s) if targeting specific items.
+3. Author name for docstring headers.
+4. Semantic model name and workspace name.
+5. XMLA endpoint URL (format: powerbi://api.powerbi.com/v1.0/myorg/WorkspaceName)
+If the user does not know their XMLA endpoint, instruct them to find it in the
+Power BI service under Workspace Settings > Premium > XMLA Endpoint.
+
+### Path 2 — Script Output
+Generate both scripts side by side:
+
+SCRIPT A — TMSL ALTER (run in SSMS or Azure Data Studio):
+- Use the TMSL alter command for each measure or partition.
+- Embed the fully documented DAX or M expression inside "expression" field.
+- Wrap multiple alters in a JSON sequence array.
+
+SCRIPT B — Tabular Editor C# Script (run in Tabular Editor 2 or 3):
+- Loop through the specified measures or partitions using foreach.
+- Set .Expression to the documented code string.
+- Call Model.SaveChanges() once at the end.
+- Include comments in the C# script explaining each step.
+
+After the scripts, add a HOW TO RUN section with numbered steps for each tool.
+
+# Core Rules (Both Paths)
+- NEVER change the logic, values, or structure of the code.
+- Only add or improve comments, docstrings, step names, or object names.
+- If the path or language is unclear, ask before proceeding.
+- When naming conventions are sound, say so — do not invent changes.
+- For naming violations: LIST proposed changes with reasons. Do NOT apply
+  them until the user explicitly says "apply" or "yes, rename them".
+
+# DAX Documentation Standards
+
+## Docstring Header Block
+Add this /* */ block at the top of every non-trivial measure or calculated column.
+Ask the user for Author and Date if unknown — do not invent placeholders.
+
+/*
+  Measure: [Measure Name]
+  Author: [Author Name]
+  Date Created: [YYYY-MM-DD]
+  Last Modified: [YYYY-MM-DD]
+  Version: 1.0
+
+  Purpose: [One sentence — what does this calculate?]
+  Business Context: [Why this matters to the business]
+
+  Dependencies:
+    Tables:   [list all tables referenced]
+    Measures: [list other measures called]
+    Columns:  [list columns referenced]
+
+  Return Value: [data type and what the result represents]
+  Notes: [optional — edge cases, known issues, planned changes]
+*/
+
+## DAX Inline Comments
+- Use // for all inline comments.
+- Comment every VAR block: what does this variable represent?
+- Comment non-obvious CALCULATE filters: why is this filter applied?
+- Comments explain WHY, not WHAT — never restate the code literally.
+- Add // RETURN on the line above the RETURN keyword.
+
+## DAX Naming Rules — Flag, Propose, Wait for Approval
+- Tables: Title Case noun with spaces (Sales, Customer). No dim_/fact_ prefixes.
+- Columns: Descriptive phrase, Title Case (Customer Segment, Order Date).
+- Measures: Descriptive phrase, Title Case. Suffixes: YTD, QTD, MTD, YoY, %.
+- Variables: PascalCase multi-word (CurrentYearSales). Final variable = Result.
+- Never: single-letter vars (x, n), vague names (Temp, Var1), underscores.
+
+# M Code Documentation Standards
+
+## Query Header Comment
+Add this /* */ block immediately before the let keyword.
+
+/*
+  Query: [Query Name]
+  Author: [Author Name]
+  Date Created: [YYYY-MM-DD]
+  Last Modified: [YYYY-MM-DD]
+  Version: 1.0
+
+  Purpose: [What data does this load or transform?]
+  Source: [Data source name and connection type]
+  Output: [Key output columns and their data types]
+  Notes: [Refresh dependencies, incremental load flags, sensitivity level]
+*/
+
+## M Code Step Comments
+Add a // comment above each step: // [Action] — [Business reason or rule]
+Example: // Remove nulls — rows missing OrderID are invalid for reporting
+
+## M Code Naming Rules — Flag, Propose, Wait for Approval
+- Steps: PascalCase Verb+Object (FilteredRows, RenamedColumns, AddedOrderYear).
+  Standard verbs: Source, Filtered, Renamed, Added, Removed, Merged, Expanded,
+  Pivoted, Unpivoted, Sorted, Grouped, Replaced, Promoted.
+  Never keep auto-generated names: Custom1, Added Column, Changed Type1.
+- Queries: PascalCase descriptive noun (SalesData, CustomerDimension, DateTable).
+- Parameters: PascalCase with type context (StartDate, MaxRows, ServerName).
+- Functions: PascalCase verb phrase (CleanPhoneNumber, NormalizeCountryCode).
+
+## M Custom Function Documentation
+Wrap custom M functions using Value.ReplaceType with Documentation.* metadata:
+
+let
+  FunctionType = type function (input as [type]) as [type] meta [
+    Documentation.Name        = "FunctionName",
+    Documentation.Description = "Short one-line description.",
+    Documentation.LongDescription = "Full description with business context.",
+    Documentation.Category    = "Category Name",
+    Documentation.Author      = "Author Name",
+    Documentation.Examples    = {[
+      Description = "Example scenario",
+      Code        = "FunctionName(exampleInput)",
+      Result      = "expected output"
+    ]}
+  ],
+  FunctionImpl = (input as [type]) as [type] => /* logic */,
+  Result = Value.ReplaceType(FunctionImpl, FunctionType)
+in Result
+
+# Workflow — Path 1 (Copy-Paste)
+1. Detect language — DAX or M Code. If unclear, ask.
+2. Audit naming — flag violations, list original → proposed with reason.
+   Wait for explicit user approval before renaming.
+3. Add header docstring.
+4. Add inline comments.
+5. Return full updated code in a fenced block (```dax or ```powerquery).
+6. Add Changes Made bullets and Naming Review if violations exist.
+
+# Workflow — Path 2 (Script Generation)
+1. Collect required details (scope, table/measure names, author, endpoint URL).
+2. Generate documented version of each expression using DAX or M standards above.
+3. Produce SCRIPT A (TMSL ALTER JSON) and SCRIPT B (Tabular Editor C# script).
+4. Add HOW TO RUN section with numbered steps for each tool.
+5. If naming violations exist, add Naming Review and note that renaming is
+   separate from documentation — ask if the user wants a rename script too.
+
+# Output Format
+Path 1: ```dax or ```powerquery code block → Changes Made bullets → Naming Review.
+Path 2: SCRIPT A block (```json) → SCRIPT B block (```csharp) → HOW TO RUN section.
+Keep all explanations concise — the code and change list speak for themselves.
+```
+
+---
+
+## 3. Prompting Guide
+
+### Path 1 — Copy-Paste
+
+**Basic — paste and go:**
+```
+[paste your DAX or M Code here]
+```
+
+**Control scope:**
+```
+Add only the docstring header to this DAX. Skip inline comments.
+[code]
+```
+```
+Comment every M Code step but skip naming review.
+[code]
+```
+
+**Naming review first:**
+```
+Review naming conventions in this DAX and suggest improvements only.
+[code]
+```
+Then after reviewing:
+```
+Apply the naming fixes, then add the full docstring and comments.
+```
+
+**Provide author/date:**
+```
+Add a full docstring. Author: Jane Smith. Created: 2025-03-01.
+[code]
+```
+
+**Custom M function:**
+```
+Add Microsoft Documentation metadata to this custom M function.
+[code]
+```
+
+---
+
+### Path 2 — Script Generation
+
+**Document all measures in a table:**
+```
+Generate scripts to document all measures in the Sales table of my semantic model.
+Model: Contoso Analytics
+Workspace: Finance Team
+XMLA Endpoint: powerbi://api.powerbi.com/v1.0/myorg/FinanceTeam
+Author: Jane Smith
+```
+
+**Document specific measures:**
+```
+Generate TMSL and Tabular Editor scripts to add docstrings to these three measures:
+[Total Revenue], [Gross Profit Margin], [Customer Count YTD]
+Table: KPIs
+Model: Contoso Analytics
+XMLA: powerbi://api.powerbi.com/v1.0/myorg/FinanceTeam
+Author: Jane Smith
+```
+
+**Document all M Code queries:**
+```
+Generate scripts to comment all Power Query steps in my semantic model.
+Model: Contoso Analytics
+Workspace: Finance Team
+Author: Jane Smith
+```
+
+**Recommended workflow for a full model:**
+1. Start with a single table: "Generate scripts for all measures in the Sales table."
+2. Review output. Approve naming suggestions if any.
+3. Run scripts in Tabular Editor against a dev/test model first.
+4. Once satisfied, repeat for remaining tables.
+
+---
+
+## 4. Verification Tests
+
+| Test | Input | Expected Behavior |
+|---|---|---|
+| Path 1 DAX smoke | `Total Sales = SUM(Sales[Amount])` | Header + inline comments added. Formula unchanged. |
+| Path 1 M Code smoke | Query with "Changed Type1", "Custom1" steps | Flags bad names, proposes fixes, waits for approval. |
+| Path 1 naming gate | DAX with `VAR x = ...` | Flags single-letter var, proposes PascalCase. Does NOT rename until user says so. |
+| Path 1 no-change | Well-documented, correctly named code | Says conventions are sound. Makes no unnecessary changes. |
+| Path 2 trigger | "Generate scripts to document all measures in Sales table" | Asks for model name, workspace, XMLA endpoint, author before generating. |
+| Path 2 output | All details provided | Produces both TMSL JSON script and Tabular Editor C# script with HOW TO RUN steps. |
+| Path 2 naming | Measures with naming violations in scope | Generates documentation scripts first, then asks separately about rename scripts. |
+| Ambiguity | Pasted code without saying DAX or M | Asks for clarification before proceeding. |
+
+---
+
+## 5. Path 2 — Implementation Guide
+
+### Option A: Script Generation Only (No Extra Infrastructure)
+
+This is what the agent instructions above implement. The agent generates:
+- **TMSL ALTER scripts** (JSON) — run in SSMS or Azure Data Studio against the XMLA endpoint
+- **Tabular Editor C# scripts** — run in Tabular Editor 2 (free) or Tabular Editor 3
+
+**No backend service, no Azure Function, no custom API plugin required.**
+The user runs the scripts manually once. This covers 90% of use cases.
+
+**Requirements for the user:**
+- Power BI Premium capacity, Premium Per User (PPU), or Microsoft Fabric workspace
+- XMLA read-write endpoint enabled (Workspace Settings → Premium → XMLA Endpoint → Read Write)
+- SSMS, Azure Data Studio, or Tabular Editor installed
+
+**TMSL ALTER script template (generated by agent):**
+```json
+{
+  "alter": {
+    "object": {
+      "database": "SemanticModelName",
+      "table": "TableName",
+      "measure": "MeasureName"
+    },
+    "measure": {
+      "name": "MeasureName",
+      "expression": [
+        "/* Measure: MeasureName */",
+        "/* Author: Jane Smith */",
+        "/* ... */",
+        "VAR Result = SUM(Sales[Amount])",
+        "RETURN Result"
+      ]
+    }
+  }
+}
+```
+
+**Tabular Editor C# script template (generated by agent):**
+```csharp
+// Document all measures in the Sales table
+// Generated by DAX & M Code Docs Agent
+// Run in Tabular Editor 2 or 3 (Model > C# Script)
+
+foreach (var measure in Model.Tables["Sales"].Measures)
+{
+    // Wrap each measure expression with a docstring header
+    string docstring = $@"/*
+  Measure: {measure.Name}
+  Author: Jane Smith
+  Date Created: {DateTime.Now:yyyy-MM-dd}
+  Last Modified: {DateTime.Now:yyyy-MM-dd}
+  Version: 1.0
+
+  Purpose: [Review and update this description]
+  Business Context: [Review and update this]
+
+  Dependencies:
+    Tables:   [Review and update]
+    Measures: [Review and update]
+    Columns:  [Review and update]
+
+  Return Value: Numeric value
+  Notes: Auto-documented by DAX & M Code Docs Agent
+*/
+";
+    // Prepend docstring only if one doesn't already exist
+    if (!measure.Expression.TrimStart().StartsWith("/*"))
+    {
+        measure.Expression = docstring + measure.Expression;
+    }
+}
+
+// Save all changes back to the semantic model via XMLA
+Model.SaveChanges();
+
+Info("Documentation applied to all measures in Sales table.");
+```
+
+---
+
+### Option B: Full Programmatic Path (Custom REST API Plugin)
+
+Use this when you want the agent to read live measure/query code from the model,
+document it, and write it back — all within a single agent conversation, with no
+user running scripts manually.
+
+**Architecture:**
+```
+M365 Copilot Agent (Agent Builder)
+    │
+    ▼ [Custom REST API Plugin — OpenAPI spec registered in Agent Builder]
+    │
+    ▼ [Azure Function (C#) — your backend]
+    │
+    ├── GET  /measures?model=X&table=Y     → reads measures via TOM
+    ├── GET  /queries?model=X              → reads M partition expressions via TOM
+    ├── PATCH /measures                    → writes updated DAX expressions via TOM
+    └── PATCH /queries                     → writes updated M expressions via TOM
+    │
+    ▼ [Microsoft.AnalysisServices.Tabular NuGet package]
+    │
+    ▼ [XMLA Endpoint (Power BI Premium / Fabric)]
+    │
+    ▼ [Semantic Model]
+```
+
+**License requirements:**
+- M365 Copilot license for the agent
+- Power BI Premium capacity, PPU, or Microsoft Fabric workspace
+- XMLA read-write enabled
+- Azure subscription for the Azure Function
+
+**Step 1 — Azure Function (C#) core TOM pattern:**
+```csharp
+using Microsoft.AnalysisServices.Tabular;
+
+// Connect to the semantic model via XMLA
+var server = new Server();
+server.Connect(
+    $"Provider=MSOLAP;Data Source={xmlaEndpoint};" +
+    $"User ID=app:{clientId}@{tenantId};Password={clientSecret};"
+);
+
+var db = server.Databases.FindByName(modelName);
+var table = db.Model.Tables[tableName];
+
+// READ a measure
+var measure = table.Measures[measureName];
+string currentExpression = measure.Expression;
+
+// WRITE an updated expression
+measure.Expression = documentedExpression;
+db.Model.SaveChanges();
+
+server.Disconnect();
+```
+
+**Step 2 — Register a custom plugin in Agent Builder:**
+1. Create an OpenAPI spec (JSON or YAML) describing your Azure Function's endpoints.
+2. In Agent Builder, go to **Actions → Add action → New REST API**.
+3. Upload your OpenAPI spec. Agent Builder will auto-generate the plugin.
+4. The agent can now call `GET /measures` to read code and `PATCH /measures` to write back.
+
+**Step 3 — Agent conversation flow (Path 2b):**
+1. User: "Document all measures in the Sales table of my Contoso Analytics model."
+2. Agent calls `GET /measures?model=ContosoAnalytics&table=Sales` → gets all expressions.
+3. Agent adds docstrings and inline comments to each expression.
+4. Agent presents a preview and asks for confirmation.
+5. User: "Apply them."
+6. Agent calls `PATCH /measures` with all updated expressions → XMLA writes to model.
+7. Agent confirms what was changed.
+
+**Authentication options for the Azure Function:**
+- **Service principal** (recommended for automation): Register an app in Azure AD,
+  grant it workspace member access in Power BI, use client credentials flow.
+- **Delegated / on-behalf-of**: Use the signed-in user's token (requires consent flow).
+
+**Key NuGet packages:**
+```
+Microsoft.AnalysisServices.Tabular (version 19.x or later)
+Microsoft.Identity.Client (MSAL for Azure AD auth)
+```
+
+---
+
+## 6. Standards Reference
+
+### DAX
+- SQLBI DAX Style Guide: https://docs.sqlbi.com/dax-style/
+- SQLBI Naming Conventions: https://docs.sqlbi.com/dax-style/dax-naming-conventions
+- SQLBI Formatting Rules: https://www.sqlbi.com/articles/rules-for-dax-code-formatting/
+- DAX Formatter (free): https://www.daxformatter.com/
+
+### M Code
+- Microsoft: M Function Documentation: https://learn.microsoft.com/en-us/power-query/handling-documentation
+- Microsoft: Power Query Best Practices: https://learn.microsoft.com/en-us/power-query/best-practices
+- Microsoft: M Comments Reference: https://learn.microsoft.com/en-us/powerquery-m/comments
+
+### Tabular Editor (for Path 2 Option A)
+- Download (free): https://github.com/TabularEditor/TabularEditor
+- C# Scripts docs: https://docs.tabulareditor.com/te3/features/csharp-scripts.html
+- Agentic development blog: https://tabulareditor.com/blog/how-tabular-editor-supports-agentic-development-for-semantic-models
+- CLI options: https://docs.tabulareditor.com/te2/Command-line-Options.html
+
+### XMLA / TOM / TMSL
+- XMLA endpoint overview: https://learn.microsoft.com/en-us/fabric/enterprise/powerbi/service-premium-connect-tools
+- TOM overview: https://learn.microsoft.com/en-us/analysis-services/tom/introduction-to-the-tabular-object-model-tom-in-analysis-services-amo
+- TOM for Power BI: https://learn.microsoft.com/en-us/analysis-services/tom/tom-pbi-datasets
+- TMSL reference: https://learn.microsoft.com/en-us/analysis-services/tmsl/tabular-model-scripting-language-tmsl-reference
+
+### M365 Agent Builder
+- Declarative Agent Overview: https://learn.microsoft.com/en-us/microsoft-365-copilot/extensibility/overview-declarative-agent
+- Writing Effective Instructions: https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/declarative-agent-instructions
+- API Plugins for M365 Copilot: https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/overview-plugins
+- Build API Plugin with new API: https://learn.microsoft.com/en-us/microsoft-365-copilot/extensibility/build-api-plugins-new-api
